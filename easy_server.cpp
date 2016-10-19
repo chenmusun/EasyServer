@@ -348,8 +348,10 @@ void EasyServer::AcceptUdpConn(evutil_socket_t fd, short what, void * arg){
         LOG(WARNING)<<"packet can't get handle cb for port "<<thread_local_port;
 }
 
-void EasyServer::SendDataToTcpConnection(int threadindex,const std::string& sessionid,unsigned char * data,unsigned int len,bool runinthreadpool,void *arg,int arglen)
+void EasyServer::SendDataToTcpConnection(int threadindex,const std::string& sessionid,void * data,unsigned int len,bool runinthreadpool,void *arg,int arglen)
 {
+    if(threadindex<0||sessionid.empty())
+        return;
     std::shared_ptr<WorkerThread> worker=vec_workers_[threadindex];
     if(worker){
         if(runinthreadpool){//in thread pool
@@ -395,5 +397,21 @@ void EasyServer::CloseTcpConnection(int threadindex,const std::string& sessionid
 }
 
 std::shared_ptr<TcpConnItem> EasyServer::GetTcpConnection(int threadindex,const std::string& sessionid){
+    if(threadindex<0||sessionid.empty())
+        return std::shared_ptr<TcpConnItem>(nullptr);
     return vec_workers_[threadindex]->FindTcpConnItem(sessionid);
+}
+
+bool EasyServer::IsTcpConnectionExist(int threadindex,const std::string& sessionid)
+{
+    bool ret=true;
+    do{
+        if(threadindex<0||sessionid.empty()){
+            ret=false;
+            break;
+        }
+        ret=vec_workers_[threadindex]->IsTcpConnItemExist(sessionid);
+    }while(0);
+
+    return ret;
 }

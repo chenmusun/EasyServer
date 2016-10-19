@@ -19,14 +19,14 @@ struct SocketPort{
 
 struct SessionData
 {
-    SessionData(unsigned char* d,int l,const std::string sid,void * a=NULL,int al=0){
+    SessionData(void* d,int l,const std::string sid,void * a=NULL,int al=0){
         data=d;
         len=l;
         sessionid=sid;
         arg=a;
         arglen=al;
     }
-    unsigned char * data;
+    void * data;
     int len;
     void * arg;
     int arglen;
@@ -53,6 +53,7 @@ struct TcpConnItem{
                         remaininglength=0;
                         sessionid=sid;
                         /* isfirstpacket=true; */
+                        handlefunindex=-1;
                 }
 
         virtual ~TcpConnItem()
@@ -106,6 +107,7 @@ struct TcpConnItem{
         void * data;
         unsigned int totallength;
         unsigned int remaininglength;
+        int handlefunindex;
         /* bool isfirstpacket; */
         std::string sessionid;
 };

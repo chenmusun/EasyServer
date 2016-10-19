@@ -22,7 +22,9 @@ typedef void (*overtime_cb)(evutil_socket_t fd, short what,void * arg);
 typedef unsigned int (*tcppacketlen_cb)(unsigned char * data,int len);
 typedef void (*tcppackethandle_cb)(EasyServer * server,int threadindex,const std::string& sessionid,unsigned char * data,int len,bool runinthreadpool);
 typedef void (*udppackethandle_cb)(unsigned char * data,int len);
-typedef	void (*tcppacketsendresult_cb)(unsigned char  * data,int len,const std::string& sessionid,void * arg,int arglen,bool isok);
+typedef	void (*tcppacketsendresult_cb)(void  * data,int len,const std::string& sessionid,void * arg,int arglen,bool isok);
+
+
 
 struct UdpPacketHandleCb{
 	UdpPacketHandleCb(udppackethandle_cb c,int p){
@@ -41,25 +43,30 @@ struct UdpPacketHandleCb{
 };
 
 struct TcpPacketHandleCb{
-	TcpPacketHandleCb(tcppackethandle_cb hc,int p,bool tph=false,tcppacketlen_cb lcb=NULL,int l=-1){
+	TcpPacketHandleCb(tcppackethandle_cb hc,int p,bool tph=false,bool ar=true,tcppacketlen_cb lcb=NULL,int l=-1){
 		handlecb=hc;
 		lencb=lcb;
 		port=p;
 		threadpoolhandle=tph;
 		len=l;
+		autorelease=ar;
 	}
 	void operator()(EasyServer * server,int threadindex,const std::string& sessionid,unsigned char * data,int len)
 		{
 			handlecb(server,threadindex,sessionid,data,len,threadpoolhandle);
 			//回收内存
-			nedalloc::nedfree(data);
-			LOG(DEBUG)<<"Freed "<<len<<" bytes data from session "<<sessionid;
+			if(autorelease){
+				nedalloc::nedfree(data);
+				LOG(DEBUG)<<"Freed "<<len<<" bytes data from session "<<sessionid;
+			}
+
 		}
 	tcppackethandle_cb handlecb;
 	tcppacketlen_cb lencb;
 	int port;
 	int len;
 	bool threadpoolhandle;
+	bool autorelease;
 };
 
 struct TcpListener{
@@ -110,7 +117,7 @@ public:
 	void Start();
 
 	/*send data to tcp connection*/
-	void SendDataToTcpConnection(int threadindex,const std::string& sessionid,unsigned char * data,unsigned int len,bool runinthreadpool,void *arg=NULL,int arglen=0);
+	void SendDataToTcpConnection(int threadindex,const std::string& sessionid,void * data,unsigned int len,bool runinthreadpool,void *arg=NULL,int arglen=0);
 
 	/*close tcp connection*/
 	void CloseTcpConnection(int threadindex,const std::string& sessionid,bool runinthreadpool);
@@ -132,6 +139,20 @@ public:
 
 	//get tcp connection by sessionid
 	std::shared_ptr<TcpConnItem> GetTcpConnection(int threadindex,const std::string& sessionid);
+
+	//judge tcp connection exists
+	bool IsTcpConnectionExist(int threadindex,const std::string& sessionid);
+
+	template<class F, class... Args>
+	void InvokeFunctionUsingThreadPool(F f, Args... args)
+	{
+		thread_pool_->enqueue(f,args...);
+	}
+
+	static void FreeResourceByHand(unsigned char * data,int len){
+		nedalloc::nedfree(data);
+		LOG(DEBUG)<<"Freed "<<len<<" bytes data by hand";
+	}
 
 	//used inside,never mind!!!
 	/* Tcp 处理 */

@@ -47,6 +47,28 @@ static void SplitStrings(const char * data,unsigned int length,std::vector<char 
         }
 }
 
+char ConvertNumToHexChar3(unsigned char num)
+{
+    char ret=-1;
+    if(num>=0&&num<=9)
+        ret=num+'0';
+    else if(num>=10&&num<=15){
+        ret=num+'A'-10;
+    }
+
+    return ret;
+}
+
+char * ConvertBytes2HexString2(const unsigned char * bytes,int len,char * hexstr)
+{
+    for(int i=0;i<len;++i){
+        hexstr[2*i]=ConvertNumToHexChar3(bytes[i]>>4);
+        hexstr[2*i+1]=ConvertNumToHexChar3(bytes[i]&0x0f);
+    }
+
+    hexstr[2*len]='\0';
+    return hexstr;
+}
 
 WorkerThread::WorkerThread(EasyServer * es,int i)
 {
@@ -199,61 +221,10 @@ void WorkerThread::TcpConnReadCb(bufferevent * bev,void *ctx){
     size_t buffer_length=evbuffer_get_length(in);
 
     LOG(DEBUG)<<"Got "<<buffer_length<<" bytes data from "<<ptci->sessionid<<" tcp connection";
-
-
+    int threadindex=ptci->threadindex;
+    std::string sessionid=ptci->sessionid;
 
     while (buffer_length){
-        //calculate tcp packet length
-        std::vector<TcpPacketHandleCb>::iterator handlecb=thread->es_->vec_tcppackethandlecbs_.end();
-        int packetlen=-1;
-        bool threadpoolhandle=false;
-        for(auto pos=thread->es_->vec_tcppackethandlecbs_.begin();pos!=thread->es_->vec_tcppackethandlecbs_.end();++pos)
-        {
-            if(pos->port==ptci->port){
-                if(pos->lencb){
-                    unsigned char ch[65535]={0};
-                    if(evbuffer_copyout(in,ch,pos->len)!=-1){
-                        if((packetlen=(pos->lencb)(ch,pos->len))>0){
-                            // handlecb=pos->handlecb;
-                            handlecb=pos;
-                            threadpoolhandle=pos->threadpoolhandle;
-                            break;
-                        }
-                        else{
-                            packetlen=-1;
-                        }
-                    }
-                    else{
-                        packetlen=-1;
-                        LOG(ERROR)<<"evbuffer_copyout data failed from "<<ptci->sessionid<<" tcp connection";
-                        break;
-                    }
-                }
-                else{//has no application format,it matchs every packet
-                    packetlen=-1;
-                    // handlecb=pos->handlecb;
-                    handlecb=pos;
-                    threadpoolhandle=pos->threadpoolhandle;
-                    break;
-                }
-
-            }
-        }
-
-        if(handlecb==thread->es_->vec_tcppackethandlecbs_.end()){
-            LOG(WARNING)<<"packet can't get handle cb for tcp port "<<ptci->port;
-            evbuffer_drain(in,65535);//clear the buffer
-            return;
-        }
-
-        if(packetlen==-1){
-            LOG(DEBUG)<<"the tcp packet has no application protocol";
-            packetlen=buffer_length;
-        }
-        else{
-            LOG(DEBUG)<<"the tcp packet has application protocol";
-        }
-
         if(ptci->remaininglength){
             if(!ptci->AllocateCopyData(in,&buffer_length)){
                 LOG(WARNING)<<"AllocateCopyData failed";
@@ -268,16 +239,96 @@ void WorkerThread::TcpConnReadCb(bufferevent * bev,void *ctx){
                 unsigned int len=ptci->totallength;
                 ptci->ReleaseDataOwnership();//释放所有权
 
-                if(threadpoolhandle){
-                    LOG(DEBUG)<<"packet handled by threadpool";
-                    thread->es_->thread_pool_->enqueue(*handlecb,thread->es_,ptci->threadindex,ptci->sessionid,data,len);
-                }else{
-                    LOG(DEBUG)<<"packet handled by worker thread";
-                    (*handlecb)(thread->es_,ptci->threadindex,ptci->sessionid,data,len);
+                if(ptci->handlefunindex!=-1){
+                    if(thread->es_->vec_tcppackethandlecbs_[ptci->handlefunindex].threadpoolhandle){
+                        LOG(DEBUG)<<"packet handled by threadpool";
+                        thread->es_->thread_pool_->enqueue(thread->es_->vec_tcppackethandlecbs_[ptci->handlefunindex],thread->es_,ptci->threadindex,ptci->sessionid,data,len);
+                    }else{
+                        LOG(DEBUG)<<"packet handled by worker thread";
+                        (thread->es_->vec_tcppackethandlecbs_[ptci->handlefunindex])(thread->es_,ptci->threadindex,ptci->sessionid,data,len);
+                    }
+
+                    if(!thread->es_->IsTcpConnectionExist(threadindex,sessionid)){
+                        break;
+                    }
                 }
+                else{
+                    LOG(ERROR)<<"Can't be here! There must be something wrong!";
+                }
+
             }
         }
         else{
+            //calculate tcp packet length
+            std::vector<TcpPacketHandleCb>::iterator handlecb=thread->es_->vec_tcppackethandlecbs_.end();
+            int packetlen=-1;
+            bool threadpoolhandle=false;
+            for(auto pos=thread->es_->vec_tcppackethandlecbs_.begin();pos!=thread->es_->vec_tcppackethandlecbs_.end();++pos)
+            {
+                if(pos->port==ptci->port){
+                    //judge the length
+                    if(buffer_length<pos->len){
+                        packetlen=-2;//the length is too short
+                        break;
+                    }
+
+                    if(pos->lencb){
+                        unsigned char ch[65535]={0};
+                        if(evbuffer_copyout(in,ch,pos->len)!=-1){
+                            if((packetlen=(pos->lencb)(ch,pos->len))>0){
+                                // handlecb=pos->handlecb;
+                                handlecb=pos;
+                                threadpoolhandle=pos->threadpoolhandle;
+                                break;
+                            }
+                            else{
+                                //TODO
+                                char tmp[20]={0};
+                                ConvertBytes2HexString2(ch,pos->len,tmp);
+                                LOG(WARNING)<<"buffer length now is "<<buffer_length<<" and bytes are "<<tmp;
+
+                                packetlen=-1;
+                            }
+                        }
+                        else{
+                            packetlen=-1;
+                            LOG(ERROR)<<"evbuffer_copyout data failed from "<<ptci->sessionid<<" tcp connection";
+                            break;
+                        }
+                    }
+                    else{//has no application format,it matchs every packet
+                        packetlen=-1;
+                        // handlecb=pos->handlecb;
+                        handlecb=pos;
+                        threadpoolhandle=pos->threadpoolhandle;
+                        break;
+                    }
+
+                }
+            }
+
+            if(packetlen==-2){
+                LOG(WARNING)<<"The length is too short";
+                break;
+            }
+
+            if(handlecb==thread->es_->vec_tcppackethandlecbs_.end()){
+                LOG(WARNING)<<"packet can't get handle cb for tcp port "<<ptci->port;
+                evbuffer_drain(in,65535);//clear the buffer
+                return;
+            }
+            else{
+                ptci->handlefunindex=handlecb-thread->es_->vec_tcppackethandlecbs_.begin();
+            }
+
+            if(packetlen==-1){
+                LOG(DEBUG)<<"the tcp packet has no application protocol";
+                packetlen=buffer_length;
+            }
+            else{
+                LOG(DEBUG)<<"the tcp packet has application protocol";
+            }
+
             if(!ptci->AllocateCopyData(in,&buffer_length,packetlen)){
                 LOG(WARNING)<<"AllocateCopyData failed";
                 ptci->FreeData();
@@ -294,14 +345,22 @@ void WorkerThread::TcpConnReadCb(bufferevent * bev,void *ctx){
                 unsigned int len=ptci->totallength;
                 ptci->ReleaseDataOwnership();//释放所有权
 
-                if(threadpoolhandle){
-                    LOG(DEBUG)<<"packet handled by threadpool";
-                    thread->es_->thread_pool_->enqueue(*handlecb,thread->es_,ptci->threadindex,ptci->sessionid,data,len);
-                }else{
-                    LOG(DEBUG)<<"packet handled by worker thread";
-                    (*handlecb)(thread->es_,ptci->threadindex,ptci->sessionid,data,len);
-                }
+                if(ptci->handlefunindex!=-1){
+                    if(thread->es_->vec_tcppackethandlecbs_[ptci->handlefunindex].threadpoolhandle){
+                        LOG(DEBUG)<<"packet handled by threadpool";
+                        thread->es_->thread_pool_->enqueue(thread->es_->vec_tcppackethandlecbs_[ptci->handlefunindex],thread->es_,ptci->threadindex,ptci->sessionid,data,len);
+                    }else{
+                        LOG(DEBUG)<<"packet handled by worker thread";
+                        (thread->es_->vec_tcppackethandlecbs_[ptci->handlefunindex])(thread->es_,ptci->threadindex,ptci->sessionid,data,len);
+                    }
 
+                    if(!thread->es_->IsTcpConnectionExist(threadindex,sessionid)){
+                        break;
+                    }
+                }
+                else{
+                    LOG(ERROR)<<"Can't be here! There must be something wrong!";
+                }
             }
 
         }
@@ -319,7 +378,7 @@ void WorkerThread::TcpConnEventCB(bufferevent *bev,short int  events,void * ctx)
 
 }
 
-void WorkerThread::SendDataToTcpConnection(unsigned char * data,int len,const std::string& sessionid,void *arg,int arglen){
+void WorkerThread::SendDataToTcpConnection(void * data,int len,const std::string& sessionid,void *arg,int arglen){
     bool ret=false;
     auto ptr=un_map_tcp_conns_.find(sessionid);
     if(ptr!=un_map_tcp_conns_.end()){

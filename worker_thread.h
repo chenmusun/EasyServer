@@ -56,6 +56,14 @@ public:
 		}
 	}
 
+	bool IsTcpConnItemExist(const std::string& sessionid){
+		bool ret=false;
+		auto pos=un_map_tcp_conns_.find(sessionid);
+		if(pos!=un_map_tcp_conns_.end())
+			ret=true;
+		return ret;
+	}
+
 	void DeleteTcpConnItem(const std::string& sessionid){
 		un_map_tcp_conns_.erase(sessionid);
 	}
@@ -109,7 +117,7 @@ public:
 		return ret;
 	}
 
-	void SendDataToTcpConnection(unsigned char * data,int len,const std::string& sessionid,void *arg,int arglen);
+	void SendDataToTcpConnection(void * data,int len,const std::string& sessionid,void *arg,int arglen);
 
 	//kill connection
 
