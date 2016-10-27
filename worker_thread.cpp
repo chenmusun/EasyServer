@@ -267,7 +267,7 @@ void WorkerThread::TcpConnReadCb(bufferevent * bev,void *ctx){
             {
                 if(pos->port==ptci->port){
                     //judge the length
-                    if(buffer_length<pos->len){
+                    if((int)buffer_length<pos->len){
                         packetlen=-2;//the length is too short
                         break;
                     }
@@ -373,6 +373,10 @@ void WorkerThread::TcpConnEventCB(bufferevent *bev,short int  events,void * ctx)
     //TODO
     LOG(DEBUG)<<"tcp conn got an event";
     TcpConnItem * ptci=static_cast<TcpConnItem *>(ctx);
+    tcpconnclose_cb closecb=thread->es_->GetTcpConnClose_cb();
+    if(closecb){
+        closecb(ptci);
+    }
     thread->DeleteTcpConnItem(ptci->sessionid);
     bufferevent_free(bev);
 

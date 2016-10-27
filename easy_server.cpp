@@ -16,6 +16,7 @@ EasyServer::EasyServer(int num_of_workers, int num_of_threads_in_threadpool)
     num_of_threads_in_threadpool_=num_of_threads_in_threadpool;
     last_thread_index_=-1;
     getresultcb_=NULL;
+    tcpclosecb_=NULL;
 }
 
 EasyServer::~EasyServer()

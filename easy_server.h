@@ -23,6 +23,7 @@ typedef unsigned int (*tcppacketlen_cb)(unsigned char * data,int len);
 typedef void (*tcppackethandle_cb)(EasyServer * server,int threadindex,const std::string& sessionid,unsigned char * data,int len,bool runinthreadpool);
 typedef void (*udppackethandle_cb)(unsigned char * data,int len);
 typedef	void (*tcppacketsendresult_cb)(void  * data,int len,const std::string& sessionid,void * arg,int arglen,bool isok);
+typedef void (*tcpconnclose_cb)(TcpConnItem * tci);
 
 
 
@@ -137,6 +138,11 @@ public:
 		getresultcb_=cb;
 	}
 
+	//set tcp conn close callback
+	void SetTcpConnClose_cb(tcpconnclose_cb cb){
+		tcpclosecb_=cb;
+	}
+
 	//get tcp connection by sessionid
 	std::shared_ptr<TcpConnItem> GetTcpConnection(int threadindex,const std::string& sessionid);
 
@@ -180,6 +186,10 @@ public:
 	tcppacketsendresult_cb GetTcpPacketSendResult_cb(){
 		return getresultcb_;
 	}
+
+	tcpconnclose_cb GetTcpConnClose_cb(){
+		return tcpclosecb_;
+	}
 private:
 	bool StartTcpListen(TcpListener& tl,int port);
 	bool StartUdpListen(UdpListener& ul,int port);
@@ -195,6 +205,7 @@ private:
 	std::vector<UdpListener> vec_udp_listeners_;
 	std::vector<OvertimeListener> vec_overtime_listeners_;
 	tcppacketsendresult_cb getresultcb_;
+	tcpconnclose_cb tcpclosecb_;
 public:
 	std::vector<TcpPacketHandleCb> vec_tcppackethandlecbs_;
 	std::vector<UdpPacketHandleCb> vec_udppackethandlecbs_;
