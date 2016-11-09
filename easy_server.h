@@ -44,13 +44,15 @@ struct UdpPacketHandleCb{
 };
 
 struct TcpPacketHandleCb{
-	TcpPacketHandleCb(tcppackethandle_cb hc,int p,bool tph=false,bool ar=true,tcppacketlen_cb lcb=NULL,int l=-1){
+	TcpPacketHandleCb(tcppackethandle_cb hc,int p,bool tph=false,bool ar=true,tcppacketlen_cb lcb=NULL,int l=-1,tcppacketsendresult_cb rcb=NULL,tcpconnclose_cb ccb=NULL){
 		handlecb=hc;
 		lencb=lcb;
 		port=p;
 		threadpoolhandle=tph;
 		len=l;
 		autorelease=ar;
+		resultcb=rcb;
+		closecb=ccb;
 	}
 	void operator()(EasyServer * server,int threadindex,const std::string& sessionid,unsigned char * data,int len)
 		{
@@ -64,6 +66,8 @@ struct TcpPacketHandleCb{
 		}
 	tcppackethandle_cb handlecb;
 	tcppacketlen_cb lencb;
+	tcppacketsendresult_cb resultcb;
+	tcpconnclose_cb closecb;
 	int port;
 	int len;
 	bool threadpoolhandle;

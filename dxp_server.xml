@@ -1,0 +1,29 @@
+<server>
+  <tcpportnum>2</tcpportnum>
+  <tcpport0>4001</tcpport0>
+  <tcpport1>4002</tcpport1>
+  <udpportnum>3</udpportnum>
+  <udpport0>4001</udpport0>
+  <udpport1>4002</udpport1>
+  <udpport2>4003</udpport2>
+  <tcpsmsportnum>1</tcpsmsportnum>
+  <tcpsmsport0>6789</tcpsmsport0>
+  <tcpterportnum>1</tcpterportnum>
+  <tcpterport0>7890</tcpterport0>
+  <threadnum>12</threadnum>
+  <timespan>2</timespan>
+  <overtime>200</overtime>
+  <threadpool>10</threadpool>
+  <ifname>eth0</ifname>
+  <redisserver>redis.dedao.loc</redisserver>
+  <redisport>6379</redisport>
+  <kafkabroker>data01.dedao.loc</kafkabroker>
+  <mongodbserver>mongodb://mongo:30005/</mongodbserver>
+  <mongodbdb>rawDatadb</mongodbdb>
+  <mongodbdeviceinfocoll>dxpDeviceInfo</mongodbdeviceinfocoll>
+  <mongodbdeviceconfcoll>dxpDeviceConfig</mongodbdeviceconfcoll>
+  <mongodbdevicelocationcoll>dxpDeviceLocation</mongodbdevicelocationcoll>
+  <mongodbtripdatacoll>dxpTripData</mongodbtripdatacoll>
+  <mongodbtowingdatacoll>dxpTowingData</mongodbtowingdatacoll>
+  <mongodbcrashdatacoll>dxpCrashData</mongodbcrashdatacoll>
+</server>
