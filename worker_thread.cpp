@@ -390,16 +390,17 @@ void WorkerThread::SendDataToTcpConnection(void * data,int len,const std::string
         if(bufferevent_write(ptr->second->buff,data,len)!=-1){
             ret=true;
         }
+
+        //invoke the result get cb
+        // tcppacketsendresult_cb getcb=es_->GetTcpPacketSendResult_cb();
+        tcppacketsendresult_cb getcb=thread->es_->vec_tcppackethandlecbs_[ptr->second->handlefunindex].resultcb;
+        if(getcb)
+            getcb(data,len,sessionid,arg,arglen,ret);
+        else{
+            LOG(WARNING)<<"You have not set a get result callback for sending packet!";
+        }
     }
 
-    //invoke the result get cb
-    // tcppacketsendresult_cb getcb=es_->GetTcpPacketSendResult_cb();
-    tcppacketsendresult_cb getcb=thread->es_->vec_tcppackethandlecbs_[ptr->second->handlefunindex].resultcb;
-    if(getcb)
-        getcb(data,len,sessionid,arg,arglen,ret);
-    else{
-        LOG(WARNING)<<"You have not set a get result callback for sending packet!";
-    }
 }
 
 void WorkerThread::KillTcpConnection(const std::string& sessionid)

@@ -223,6 +223,7 @@ bool EasyServer::StartOvertimeListen(OvertimeListener& ol,int timespan,overtime_
 
         ol.overtime_listen_base=base;
         ol.overtime_listen_event=listen_event;
+        ol.overtime_listen_thread=listen_thread;
 
         return true;
     }while (0);
