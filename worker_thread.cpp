@@ -283,7 +283,7 @@ void WorkerThread::TcpConnReadCb(bufferevent * bev,void *ctx){
                             }
                             else{
                                 //TODO
-                                char tmp[20]={0};
+                                char tmp[200]={0};
                                 ConvertBytes2HexString2(ch,pos->len,tmp);
                                 LOG(WARNING)<<"buffer length now is "<<buffer_length<<" and bytes are "<<tmp;
 
@@ -407,6 +407,10 @@ void WorkerThread::KillTcpConnection(const std::string& sessionid)
 {
     auto ptr=un_map_tcp_conns_.find(sessionid);
     if(ptr!=un_map_tcp_conns_.end()){
+        tcpconnclose_cb closecb=thread->es_->vec_tcppackethandlecbs_[ptr->second->handlefunindex].closecb;
+        if(closecb){
+            closecb(ptr->second.get());
+        }
         bufferevent_free(ptr->second->buff);
         DeleteTcpConnItem(sessionid);
         LOG(DEBUG)<<"Tcp connection "<<sessionid<<" killed";
