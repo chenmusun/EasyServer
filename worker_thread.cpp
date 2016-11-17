@@ -374,10 +374,13 @@ void WorkerThread::TcpConnEventCB(bufferevent *bev,short int  events,void * ctx)
     LOG(DEBUG)<<"tcp conn got an event";
     TcpConnItem * ptci=static_cast<TcpConnItem *>(ctx);
     // tcpconnclose_cb closecb=thread->es_->GetTcpConnClose_cb();
-    tcpconnclose_cb closecb=thread->es_->vec_tcppackethandlecbs_[ptci->handlefunindex].closecb;
-    if(closecb){
-        closecb(ptci);
+    if(ptci->handlefunindex!=-1){
+        tcpconnclose_cb closecb=thread->es_->vec_tcppackethandlecbs_[ptci->handlefunindex].closecb;
+        if(closecb){
+            closecb(ptci);
+        }
     }
+
     thread->DeleteTcpConnItem(ptci->sessionid);
     bufferevent_free(bev);
 
@@ -393,12 +396,15 @@ void WorkerThread::SendDataToTcpConnection(void * data,int len,const std::string
 
         //invoke the result get cb
         // tcppacketsendresult_cb getcb=es_->GetTcpPacketSendResult_cb();
-        tcppacketsendresult_cb getcb=thread->es_->vec_tcppackethandlecbs_[ptr->second->handlefunindex].resultcb;
-        if(getcb)
-            getcb(data,len,sessionid,arg,arglen,ret);
-        else{
-            LOG(WARNING)<<"You have not set a get result callback for sending packet!";
+        if(ptr->second->handlefunindex!=-1){
+            tcppacketsendresult_cb getcb=thread->es_->vec_tcppackethandlecbs_[ptr->second->handlefunindex].resultcb;
+            if(getcb)
+                getcb(data,len,sessionid,arg,arglen,ret);
+            else{
+                LOG(WARNING)<<"You have not set a get result callback for sending packet!";
+            }
         }
+
     }
 
 }
@@ -407,10 +413,13 @@ void WorkerThread::KillTcpConnection(const std::string& sessionid)
 {
     auto ptr=un_map_tcp_conns_.find(sessionid);
     if(ptr!=un_map_tcp_conns_.end()){
-        tcpconnclose_cb closecb=thread->es_->vec_tcppackethandlecbs_[ptr->second->handlefunindex].closecb;
-        if(closecb){
-            closecb(ptr->second.get());
+        if(ptr->second->handlefunindex!=-1){
+            tcpconnclose_cb closecb=thread->es_->vec_tcppackethandlecbs_[ptr->second->handlefunindex].closecb;
+            if(closecb){
+                closecb(ptr->second.get());
+            }
         }
+
         bufferevent_free(ptr->second->buff);
         DeleteTcpConnItem(sessionid);
         LOG(DEBUG)<<"Tcp connection "<<sessionid<<" killed";
