@@ -58,6 +58,9 @@ struct TcpConnItem{
 
         virtual ~TcpConnItem()
                 {
+                    FreeData();
+                    if(buff)
+                        bufferevent_free(buff);
                 }
 
         bool AllocateCopyData( struct evbuffer * in,size_t * buffer_len,unsigned short length=0)//allocate need length
@@ -86,6 +89,7 @@ struct TcpConnItem{
     void FreeData()
         {
             if(data){
+                LOG(DEBUG)<<"Freed "<<totallength<<" bytes data from session "<<sessionid;
                 nedalloc::nedfree(data);
                 data=NULL;
             }

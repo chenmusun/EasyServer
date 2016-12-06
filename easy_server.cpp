@@ -315,32 +315,56 @@ void EasyServer::AcceptTcpConn(evconnlistener * listener, int sock, sockaddr * a
 void EasyServer::AcceptUdpConn(evutil_socket_t fd, short what, void * arg){
     LOG(DEBUG)<<"Accept udp Conn";
     EasyServer * es=static_cast<EasyServer *>(arg);
-    // socklen_t addr_len=sizeof(sockaddr_in);
-    // struct sockaddr_in addr;
-    // memset(&addr,0,addr_len);
-    char buf[65535]={0};
+    socklen_t addr_len=sizeof(sockaddr_in);
+    struct sockaddr_in * addr=NULL;
     int datalen=-1;
-    if((datalen=recvfrom(fd,buf,65535,0,NULL,NULL))<=0){
+    void * data=NULL;
+    int dupfd=-1;
+
+    do{
+        addr=(struct sockaddr_in *)nedalloc::nedcalloc(addr_len,1);
+    if(!addr)
+    {
+        LOG(WARNING)<<"nedalloc::nedcalloc failed for udp addr";
+        break;
+    }
+    else{
+        LOG(DEBUG)<<"Allocated "<<addr_len<<" bytes data for udp addr ";
+    }
+
+    char buf[65535]={0};
+
+    if((datalen=recvfrom(fd,buf,65535,0,(struct sockaddr *)addr,&addr_len))<=0){
         LOG(WARNING)<<"read data from udp failed";
-        return;
+        break;
     }
 
     void * data=nedalloc::nedmalloc(datalen);
     if(!data)
     {
         LOG(WARNING)<<"nedalloc::nedmalloc failed for udp packet";
-        return;
+        break;
     }
     else{
         LOG(DEBUG)<<"Allocated "<<datalen<<" bytes data for udp packet ";
     }
 
     memcpy(data,buf,datalen);
+
+    dupfd=dup(fd);
+    if(dupfd==-1){
+        LOG(WARNING)<<"dup udp fd failed";
+        break;
+    }
+    else{
+        LOG(DEBUG)<<"dup udp fd success!";
+    }
+
     bool packethandled=false;
     for(auto pos=es->vec_udppackethandlecbs_.begin();pos!=es->vec_udppackethandlecbs_.end();++pos){
         if(pos->port==thread_local_port){
             if(pos->cb){
-                es->thread_pool_->enqueue(*pos,(unsigned char *)data,datalen);
+                es->thread_pool_->enqueue(*pos,(unsigned char *)data,(int)datalen,(void *)addr,(int)addr_len,dupfd);
                 packethandled=true;
             }
         }
@@ -348,6 +372,26 @@ void EasyServer::AcceptUdpConn(evutil_socket_t fd, short what, void * arg){
 
     if(!packethandled)
         LOG(WARNING)<<"packet can't get handle cb for port "<<thread_local_port;
+
+    return;
+    }while(0);
+
+    //error occurs
+    if(addr){
+        LOG(DEBUG)<<"Free "<<addr_len<<" bytes data for udp addr ";
+        nedalloc::nedfree(addr);
+    }
+
+    if(data){
+        LOG(DEBUG)<<"Free "<<datalen<<" bytes data for udp packet ";
+        nedalloc::nedfree(data);
+    }
+
+    if(dupfd!=-1){
+        LOG(DEBUG)<<"close duplicated fd for udp fd";
+        close(dupfd);
+    }
+
 }
 
 void EasyServer::SendDataToTcpConnection(int threadindex,const std::string& sessionid,void * data,unsigned int len,bool runinthreadpool,void *arg,int arglen)

@@ -371,8 +371,9 @@ void WorkerThread::TcpConnReadCb(bufferevent * bev,void *ctx){
 
 void WorkerThread::TcpConnEventCB(bufferevent *bev,short int  events,void * ctx){
     //TODO
-    LOG(DEBUG)<<"tcp conn got an event";
+
     TcpConnItem * ptci=static_cast<TcpConnItem *>(ctx);
+    LOG(DEBUG)<<"tcp conn got an event "<<ptci->sessionid;
     // tcpconnclose_cb closecb=thread->es_->GetTcpConnClose_cb();
     if(ptci->handlefunindex!=-1){
         tcpconnclose_cb closecb=thread->es_->vec_tcppackethandlecbs_[ptci->handlefunindex].closecb;
@@ -382,7 +383,7 @@ void WorkerThread::TcpConnEventCB(bufferevent *bev,short int  events,void * ctx)
     }
 
     thread->DeleteTcpConnItem(ptci->sessionid);
-    bufferevent_free(bev);
+    // bufferevent_free(bev);
 
 }
 
@@ -420,7 +421,7 @@ void WorkerThread::KillTcpConnection(const std::string& sessionid)
             }
         }
 
-        bufferevent_free(ptr->second->buff);
+        // bufferevent_free(ptr->second->buff);
         DeleteTcpConnItem(sessionid);
         LOG(DEBUG)<<"Tcp connection "<<sessionid<<" killed";
     }

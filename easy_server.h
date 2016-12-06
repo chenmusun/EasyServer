@@ -21,7 +21,7 @@ class EasyServer;
 typedef void (*overtime_cb)(evutil_socket_t fd, short what,void * arg);
 typedef unsigned int (*tcppacketlen_cb)(unsigned char * data,int len);
 typedef void (*tcppackethandle_cb)(EasyServer * server,int threadindex,const std::string& sessionid,unsigned char * data,int len,bool runinthreadpool);
-typedef void (*udppackethandle_cb)(unsigned char * data,int len);
+typedef void (*udppackethandle_cb)(unsigned char * data,int len,void * addr,int addrlen,int fd);
 typedef	void (*tcppacketsendresult_cb)(void  * data,int len,const std::string& sessionid,void * arg,int arglen,bool isok);
 typedef void (*tcpconnclose_cb)(TcpConnItem * tci);
 
@@ -32,12 +32,19 @@ struct UdpPacketHandleCb{
 		cb=c;
 		port=p;
 	}
-	void operator()(unsigned char * data,int len)
+	void operator()(unsigned char * data,int len,void * addr,int addrlen,int fd)
 		{
-			cb(data,len);
+			cb(data,len,addr,addrlen,fd);
 			//回收内存
 			nedalloc::nedfree(data);
-			LOG(DEBUG)<<"Freed "<<len<<" bytes data for udp";
+			LOG(DEBUG)<<"Freed "<<len<<" bytes data for udp packet";
+			nedalloc::nedfree((void *)addr);
+			LOG(DEBUG)<<"Freed "<<addrlen<<" bytes data for udp addr";
+			if(fd!=-1)
+			{
+				LOG(DEBUG)<<"close udp duplicated fd";
+				close(fd);
+			}
 		}
 	udppackethandle_cb cb;
 	int port;
