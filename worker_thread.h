@@ -43,7 +43,10 @@ public:
 	}
 
 	void InsertTcpConnItem(std::shared_ptr<TcpConnItem> ptci){
-		un_map_tcp_conns_.insert(std::make_pair(ptci->sessionid,ptci));
+		auto pos=un_map_tcp_conns_.insert(std::make_pair(ptci->sessionid,ptci));
+		if(!pos.second){
+			pos.first->second=ptci;
+		}
 	}
 
 	std::shared_ptr<TcpConnItem> FindTcpConnItem(const std::string& sessionid)

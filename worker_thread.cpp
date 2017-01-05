@@ -11,42 +11,6 @@
 
 thread_local WorkerThread *thread=NULL;
 
-static void SplitStrings(const char * data,unsigned int length,std::vector<char *>& v)
-{
-        if(data[length-1]=='\n')
-           length-=1;
-
-        int start=-1,end=-1;
-        for(int i=0;i<length;++i){
-                if((char)(data[i])!=' '){
-                        if(start==-1)
-                                start=i;
-                }
-                else{
-                        if(start!=-1){
-                                end=i;
-                                int len=end-start;
-                                char * pch=(char *)nedalloc::nedmalloc(len+1);
-                                strncpy(pch,data+start,len);
-                                pch[len]='\0';
-                                v.push_back(pch);
-                                start=-1;
-                                end=-1;
-                        }
-
-                }
-        }
-
-        if(start!=-1)
-        {
-                int len=length-start;
-                char * pch=(char *)nedalloc::nedmalloc(len+1);
-                strncpy(pch,data+start,len);
-                pch[len]='\0';
-                v.push_back(pch);
-        }
-}
-
 char ConvertNumToHexChar3(unsigned char num)
 {
     char ret=-1;
