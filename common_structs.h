@@ -17,20 +17,36 @@ struct SocketPort{
         int port;
 };
 
+
 struct SessionData
 {
-    SessionData(void* d,int l,const std::string sid,void * a=NULL,int al=0){
+    SessionData(void* d,int l,const std::string& sid,void * a=NULL,int al=0){
         data=d;
         len=l;
         sessionid=sid;
         arg=a;
         arglen=al;
+        /* cbtype=CRESULTCB; */
+    }
+
+    SessionData(const std::string& sid,const std::string& sdata,const std::string& sarg){
+        strdata=sdata;
+        sessionid=sid;
+        strarg=sarg;
+        data=NULL;
+        len=0;
+        arg=NULL;
+        arglen=0;
+        /* cbtype=ct; */
     }
     void * data;
     int len;
     void * arg;
     int arglen;
+    std::string strarg;
+    std::string strdata;
     std::string sessionid;
+    bool hasResultCb;
 };
 
 struct SessionKill{

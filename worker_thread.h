@@ -43,6 +43,7 @@ public:
 	}
 
 	void InsertTcpConnItem(std::shared_ptr<TcpConnItem> ptci){
+		std::lock_guard<std::mutex>  lock(mutex_un_map_tcp_conns_);
 		auto pos=un_map_tcp_conns_.insert(std::make_pair(ptci->sessionid,ptci));
 		if(!pos.second){
 			pos.first->second=ptci;
@@ -51,6 +52,7 @@ public:
 
 	std::shared_ptr<TcpConnItem> FindTcpConnItem(const std::string& sessionid)
 	{
+		std::lock_guard<std::mutex>  lock(mutex_un_map_tcp_conns_);
 		auto pos=un_map_tcp_conns_.find(sessionid);
 		if(pos!=un_map_tcp_conns_.end())
 			return pos->second;
@@ -61,6 +63,7 @@ public:
 
 	bool IsTcpConnItemExist(const std::string& sessionid){
 		bool ret=false;
+		std::lock_guard<std::mutex>  lock(mutex_un_map_tcp_conns_);
 		auto pos=un_map_tcp_conns_.find(sessionid);
 		if(pos!=un_map_tcp_conns_.end())
 			ret=true;
@@ -68,6 +71,7 @@ public:
 	}
 
 	void DeleteTcpConnItem(const std::string& sessionid){
+		std::lock_guard<std::mutex>  lock(mutex_un_map_tcp_conns_);
 		un_map_tcp_conns_.erase(sessionid);
 	}
 
@@ -108,11 +112,11 @@ public:
 		return ret;
 	}
 
-	bool PushDataIntoQueueAndSendNotify(SessionData& sd){
+	bool PushDataIntoQueueAndSendNotify(SessionData& sd,char c='d'){
 		bool ret=true;
 		std::lock_guard<std::mutex>  lock(mutex_push_data_notify_);
 		PushDataIntoQueue(sd);
-		if(!NotifyWorkerThread("d")){
+		if(!NotifyWorkerThread(&c)){
 			PopDataFromQueue();
 			ret=false;
 		}
@@ -120,7 +124,9 @@ public:
 		return ret;
 	}
 
-	void SendDataToTcpConnection(void * data,int len,const std::string& sessionid,void *arg,int arglen);
+	void SendDataToTcpConnection(void * data,int len,const std::string& sessionid,void *arg,int arglen,bool hasResultCb);
+
+	void SendDataToTcpConnection(const std::string& sessionid,const std::string& strdata,const std::string& strarg,bool hasResultCb);
 
 	//kill connection
 
@@ -151,7 +157,59 @@ public:
 
 	void KillTcpConnection(const std::string& sessionid);
 
+	int GetKillSize()
+	{
+		std::lock_guard<std::mutex>  lock(mutex_kill_queue_);
+		return queue_kills_.size();
+	}
 
+	int GetDownloadSize(){
+		std::lock_guard<std::mutex>  lock(mutex_data_queue_);
+		return queue_datas_.size();
+	}
+
+	int GetSocketQueueSize(){
+		std::lock_guard<std::mutex>  lock(mutex_tcp_queue_);
+		return queue_tcp_conns_.size();
+	}
+
+	int GetSessionMapSize(){
+		std::lock_guard<std::mutex>  lock(mutex_un_map_tcp_conns_);
+		return un_map_tcp_conns_.size();
+	}
+
+	void ClearAll(){
+		/* std::queue< std::function<void()> > taskstmp(tasks); */
+        /* /\* std::queue< std::function<void()> > taskstmp(tasks); *\/ */
+        /* taskstmp.swap(tasks); */
+		//clear kill queue
+		{
+			std::lock_guard<std::mutex>  lock(mutex_kill_queue_);
+			std::queue<SessionKill> tmp;
+			queue_kills_.swap(tmp);
+		}
+
+		//clear download data queue
+		{
+			std::lock_guard<std::mutex>  lock(mutex_data_queue_);
+			std::queue<SessionData> tmp;
+			queue_datas_.swap(tmp);
+		}
+
+		//clear tcp socket queue
+		{
+			std::lock_guard<std::mutex>  lock(mutex_tcp_queue_);
+			std::queue<SocketPort> tmp;
+			queue_tcp_conns_.swap(tmp);
+		}
+
+		//clear session map
+		{
+			std::lock_guard<std::mutex>  lock( mutex_un_map_tcp_conns_);
+			std::unordered_map<std::string,std::shared_ptr<TcpConnItem> > tmp;
+			un_map_tcp_conns_.swap(tmp);
+		}
+	}
 private:
 	bool CreateNotifyFds();//创建主线程和工作线程通信管道
 	bool InitEventHandler();//初始化事件处理器
@@ -161,6 +219,7 @@ private:
 	std::mutex mutex_notify_send_fd_;
 
 	std::shared_ptr<std::thread>   ptr_thread_;
+	std::mutex mutex_un_map_tcp_conns_;
 	std::unordered_map<std::string,std::shared_ptr<TcpConnItem> > un_map_tcp_conns_;
 
 	//tcp conn
@@ -176,13 +235,12 @@ private:
 	std::mutex mutex_kill_queue_;
 	std::queue<SessionKill> queue_kills_;
 
-
-	EasyServer * es_;
 private:
 	struct event  * pnotify_event_; //主线程通知工作线程连接到来事件
 	struct event_base * pthread_event_base_;
 public:
 	int threadindex_;
+	EasyServer * es_;
 };
 #endif
 

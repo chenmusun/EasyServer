@@ -10,6 +10,9 @@
 #include"easy_server.h"
 
 thread_local WorkerThread *thread=NULL;
+extern thread_local bool isworkerthread;
+
+
 
 char ConvertNumToHexChar3(unsigned char num)
 {
@@ -70,6 +73,7 @@ bool WorkerThread::Run()
             ptr_thread_.reset(new std::thread([this]
 													 {
                                                          thread=this;//thread_local variable
+                                                         isworkerthread=true;
 														 event_base_loop(pthread_event_base_, 0);
 													 }
 										 ));
@@ -126,7 +130,11 @@ void WorkerThread::HandleNotifications(evutil_socket_t fd, short what, void* arg
         HandleTcpConn(pwt);
     else if(buf[0]=='d'){
         SessionData sd=pwt->PopDataFromQueue();
-        pwt->SendDataToTcpConnection(sd.data,sd.len,sd.sessionid,sd.arg,sd.arglen);
+        pwt->SendDataToTcpConnection(sd.data,sd.len,sd.sessionid,sd.arg,sd.arglen,sd.hasResultCb);
+    }
+    else if(buf[0]=='e'){
+        SessionData sd=pwt->PopDataFromQueue();
+        pwt->SendDataToTcpConnection(sd.sessionid,sd.strdata,sd.strarg,sd.hasResultCb);
     }
     else if(buf[0]=='k'){
         SessionKill sk=pwt->PopKillFromQueue();
@@ -351,22 +359,28 @@ void WorkerThread::TcpConnEventCB(bufferevent *bev,short int  events,void * ctx)
 
 }
 
-void WorkerThread::SendDataToTcpConnection(void * data,int len,const std::string& sessionid,void *arg,int arglen){
+void WorkerThread::SendDataToTcpConnection(void * data,int len,const std::string& sessionid,void *arg,int arglen,bool hasResultCb){
     bool ret=false;
+    std::lock_guard<std::mutex>  lock(mutex_un_map_tcp_conns_);
     auto ptr=un_map_tcp_conns_.find(sessionid);
     if(ptr!=un_map_tcp_conns_.end()){
         if(bufferevent_write(ptr->second->buff,data,len)!=-1){
             ret=true;
         }
+        // if(write(ptr->second->sock,data,len)!=-1){
+        //     ret=true;
+        // }
 
         //invoke the result get cb
         // tcppacketsendresult_cb getcb=es_->GetTcpPacketSendResult_cb();
-        if(ptr->second->handlefunindex!=-1){
-            tcppacketsendresult_cb getcb=thread->es_->vec_tcppackethandlecbs_[ptr->second->handlefunindex].resultcb;
-            if(getcb)
-                getcb(data,len,sessionid,arg,arglen,ret);
-            else{
-                LOG(WARNING)<<"You have not set a get result callback for sending packet!";
+        if(hasResultCb){
+            if(ptr->second->handlefunindex!=-1){
+                tcppacketsendresult_cb getcb=thread->es_->vec_tcppackethandlecbs_[ptr->second->handlefunindex].resultcb;
+                if(getcb)
+                    getcb(data,len,sessionid,arg,arglen,ret);
+                else{
+                    LOG(WARNING)<<"You have not set a get result callback for sending packet!";
+                }
             }
         }
 
@@ -374,8 +388,38 @@ void WorkerThread::SendDataToTcpConnection(void * data,int len,const std::string
 
 }
 
+void WorkerThread::SendDataToTcpConnection(const std::string& sessionid,const std::string& strdata,const std::string& strarg,bool hasResultCb)
+{
+    bool ret=false;
+    std::lock_guard<std::mutex>  lock(mutex_un_map_tcp_conns_);
+    auto ptr=un_map_tcp_conns_.find(sessionid);
+    if(ptr!=un_map_tcp_conns_.end()){
+        if(bufferevent_write(ptr->second->buff,strdata.c_str(),strdata.length())!=-1){
+            ret=true;
+        }
+        // if(write(ptr->second->sock,data,len)!=-1){
+        //     ret=true;
+        // }
+
+        //invoke the result get cb
+        // tcppacketsendresult_cb getcb=es_->GetTcpPacketSendResult_cb();
+        if(hasResultCb){
+            if(ptr->second->handlefunindex!=-1){
+                tcppacketsendresult_cb2 getcb=thread->es_->vec_tcppackethandlecbs_[ptr->second->handlefunindex].resultcb2;
+                if(getcb)
+                    getcb(sessionid,strdata,strarg,ret);
+                else{
+                    LOG(WARNING)<<"You have not set a get result callback for sending packet!";
+                }
+            }
+        }
+
+    }
+}
+
 void WorkerThread::KillTcpConnection(const std::string& sessionid)
 {
+    std::lock_guard<std::mutex>  lock(mutex_un_map_tcp_conns_);
     auto ptr=un_map_tcp_conns_.find(sessionid);
     if(ptr!=un_map_tcp_conns_.end()){
         if(ptr->second->handlefunindex!=-1){
@@ -389,4 +433,15 @@ void WorkerThread::KillTcpConnection(const std::string& sessionid)
         DeleteTcpConnItem(sessionid);
         LOG(DEBUG)<<"Tcp connection "<<sessionid<<" killed";
     }
+}
+
+// void MonitorServer(EasyServer * server,int threadindex,const std::string& sessionid,unsigned char * data,int len)
+// {
+//     thread->es_->InsertCaptureIntoMap(sessionid,threadindex);
+//     LOG(DEBUG)<<"insert capture "<<sessionid;
+// }
+
+void ReleaseCapture(TcpConnItem * tci)
+{
+    thread->es_->DeleteCaptureFromMap(tci->sessionid);
 }

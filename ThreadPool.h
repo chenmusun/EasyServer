@@ -18,12 +18,34 @@ public:
     auto enqueue(F&& f, Args&&... args) 
         -> std::future<typename std::result_of<F(Args...)>::type>;
     ~ThreadPool();
+
+    int GetQueueSize(){
+        std::lock_guard<std::mutex> lock(queue_mutex);
+        return tasks.size();
+    }
+
+    void ShrinkQueueToFit()
+    {
+        std::lock_guard<std::mutex> lock(queue_mutex);
+        std::queue< std::function<void()> > taskstmp(tasks);
+        /* std::queue< std::function<void()> > taskstmp(tasks); */
+        taskstmp.swap(tasks);
+    }
+
+    void ClearQueue()
+    {
+        std::lock_guard<std::mutex> lock(queue_mutex);
+        std::queue< std::function<void()> > taskstmp;
+        /* std::queue< std::function<void()> > taskstmp(tasks); */
+        taskstmp.swap(tasks);
+    }
 private:
     // need to keep track of threads so we can join them
     std::vector< std::thread > workers;
     // the task queue
+    /* std::queue< std::function<void()>,std::list< std::function<void()> > > tasks; */
     std::queue< std::function<void()> > tasks;
-    
+
     // synchronization
     std::mutex queue_mutex;
     std::condition_variable condition;

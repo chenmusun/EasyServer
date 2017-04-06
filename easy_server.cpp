@@ -9,6 +9,9 @@
 #include "worker_thread.h"
 
 thread_local int thread_local_port=-1;
+thread_local bool isworkerthread=false;
+
+
 
 EasyServer::EasyServer(int num_of_workers, int num_of_threads_in_threadpool)
 {
@@ -49,7 +52,18 @@ EasyServer::~EasyServer()
 
 }
 
-bool EasyServer::AddTcpListener(int port)
+// bool EasyServer::AddTcpListener(int port)
+// {
+//     TcpListener tl;
+//     if(!StartTcpListen(tl,port)){
+//         return false;
+//     }
+
+//     vec_tcp_listeners_.push_back(tl);
+//     return true;
+// }
+
+bool EasyServer::AddTcpListener(int port,TcpPacketHandleCb& tphcb)
 {
     TcpListener tl;
     if(!StartTcpListen(tl,port)){
@@ -57,10 +71,23 @@ bool EasyServer::AddTcpListener(int port)
     }
 
     vec_tcp_listeners_.push_back(tl);
+    vec_tcppackethandlecbs_.push_back(tphcb);
     return true;
 }
 
-bool EasyServer::AddUdpListener(int port)
+// bool EasyServer::AddUdpListener(int port)
+// {
+//     UdpListener ul;
+//     if(!StartUdpListen(ul,port))
+//     {
+//         return false;
+//     }
+
+//     vec_udp_listeners_.push_back(ul);
+//     return true;
+// }
+
+bool EasyServer::AddUdpListener(int port,UdpPacketHandleCb& udpcb)
 {
     UdpListener ul;
     if(!StartUdpListen(ul,port))
@@ -69,6 +96,7 @@ bool EasyServer::AddUdpListener(int port)
     }
 
     vec_udp_listeners_.push_back(ul);
+    vec_udppackethandlecbs_.push_back(udpcb);
     return true;
 }
 
@@ -250,10 +278,10 @@ void EasyServer::Start()
         LOG(INFO)<<"using selfdefined tcp conn factory";
     }
 
-    if(!CreateAllWorkerThreads()){
-        LOG(ERROR)<<"Create worker threads failed";
-        return;
-    }
+    // if(!CreateAllWorkerThreads()){
+    //     LOG(ERROR)<<"Create worker threads failed";
+    //     return;
+    // }
 
     for(auto pos=vec_tcp_listeners_.begin();pos!=vec_tcp_listeners_.end();++pos)
     {
@@ -339,7 +367,7 @@ void EasyServer::AcceptUdpConn(evutil_socket_t fd, short what, void * arg){
         break;
     }
 
-    void * data=nedalloc::nedmalloc(datalen);
+    data=nedalloc::nedmalloc(datalen);
     if(!data)
     {
         LOG(WARNING)<<"nedalloc::nedmalloc failed for udp packet";
@@ -357,14 +385,14 @@ void EasyServer::AcceptUdpConn(evutil_socket_t fd, short what, void * arg){
         break;
     }
     else{
-        LOG(DEBUG)<<"dup udp fd success!";
+        LOG(DEBUG)<<"dup udp fd success!"<<dupfd;
     }
 
     bool packethandled=false;
     for(auto pos=es->vec_udppackethandlecbs_.begin();pos!=es->vec_udppackethandlecbs_.end();++pos){
         if(pos->port==thread_local_port){
             if(pos->cb){
-                es->thread_pool_->enqueue(*pos,(unsigned char *)data,(int)datalen,(void *)addr,(int)addr_len,dupfd);
+                es->thread_pool_->enqueue(*pos,es,(unsigned char *)data,(int)datalen,(void *)addr,(int)addr_len,dupfd);
                 packethandled=true;
             }
         }
@@ -388,21 +416,22 @@ void EasyServer::AcceptUdpConn(evutil_socket_t fd, short what, void * arg){
     }
 
     if(dupfd!=-1){
-        LOG(DEBUG)<<"close duplicated fd for udp fd";
+        LOG(DEBUG)<<"close duplicated fd for udp fd"<<dupfd;
         close(dupfd);
     }
 
 }
 
-void EasyServer::SendDataToTcpConnection(int threadindex,const std::string& sessionid,void * data,unsigned int len,bool runinthreadpool,void *arg,int arglen)
+void EasyServer::SendDataToTcpConnection(int threadindex,const std::string& sessionid,void * data,unsigned int len,void *arg,int arglen,bool hasResultCb)
 {
     if(threadindex<0||sessionid.empty())
         return;
     std::shared_ptr<WorkerThread> worker=vec_workers_[threadindex];
     if(worker){
-        if(runinthreadpool){//in thread pool
+        if(!isworkerthread){//in thread pool
             SessionData sd(data,len,sessionid,arg,arglen);
-            if(!worker->PushDataIntoQueueAndSendNotify(sd)){
+            sd.hasResultCb=hasResultCb;
+            if(!worker->PushDataIntoQueueAndSendNotify(sd,'d')){
                 LOG(WARNING)<<"PushDataIntoQueueAndSendNotify failed";
             }
             else{
@@ -411,7 +440,7 @@ void EasyServer::SendDataToTcpConnection(int threadindex,const std::string& sess
         }
         else{//send directly
             LOG(DEBUG)<<"send data back to tcp connection from worker";
-            worker->SendDataToTcpConnection(data,len,sessionid,arg,arglen);
+            worker->SendDataToTcpConnection(data,len,sessionid,arg,arglen,hasResultCb);
         }
     }
     else{
@@ -419,11 +448,38 @@ void EasyServer::SendDataToTcpConnection(int threadindex,const std::string& sess
     }
 }
 
-void EasyServer::CloseTcpConnection(int threadindex,const std::string& sessionid,bool runinthreadpool)
+void EasyServer::SendDataToTcpConnection(int threadindex,const std::string& sessionid,const std::string& strdata,const std::string& strarg,bool hasResultCb)
+{
+    if(threadindex<0||sessionid.empty())
+        return;
+    std::shared_ptr<WorkerThread> worker=vec_workers_[threadindex];
+    if(worker){
+        if(!isworkerthread){//in thread pool
+            SessionData sd(sessionid,strdata,strarg);
+            sd.hasResultCb=hasResultCb;
+
+            if(!worker->PushDataIntoQueueAndSendNotify(sd,'e')){
+                LOG(WARNING)<<"PushDataIntoQueueAndSendNotify failed";
+            }
+            else{
+                LOG(DEBUG)<<"send data back to tcp connection from threadpool";
+            }
+        }
+        else{//send directly
+            LOG(DEBUG)<<"send data back to tcp connection from worker";
+            worker->SendDataToTcpConnection(sessionid,strdata,strarg,hasResultCb);
+        }
+    }
+    else{
+        LOG(WARNING)<<"wrong thread index";
+    }
+}
+
+void EasyServer::CloseTcpConnection(int threadindex,const std::string& sessionid)
 {
     std::shared_ptr<WorkerThread> worker=vec_workers_[threadindex];
     if(worker){
-        if(runinthreadpool){//in thread pool
+        if(!isworkerthread){//in thread pool
             SessionKill sk(sessionid);
             if(!worker->PushKillIntoQueueAndSendNotify(sk)){
                 LOG(WARNING)<<"PushKillIntoQueueAndSendNotify failed";
@@ -460,4 +516,82 @@ bool EasyServer::IsTcpConnectionExist(int threadindex,const std::string& session
     }while(0);
 
     return ret;
+}
+
+bool EasyServer::Init()
+{
+    if(!CreateAllWorkerThreads()){
+        LOG(ERROR)<<"Create worker threads failed";
+        return false;
+    }
+
+    return true;
+}
+
+void EasyServer::SendDataToCaptureThread(const std::string& strdata)
+{
+    boost::shared_lock<boost::shared_mutex> lock(mutex_un_map_capture);
+    for(auto pos=un_map_capture.begin();pos!=un_map_capture.end();++pos){
+        SendDataToTcpConnection(pos->second,pos->first,strdata);
+    }
+}
+
+int EasyServer::GetKillQueueSize(){
+    int ret=0;
+    for(auto pos=vec_workers_.begin();pos!=vec_workers_.end();++pos){
+        ret+=(*pos)->GetKillSize();
+    }
+
+    return ret;
+}
+
+int EasyServer::GetDownloadQueueSize(){
+    int ret=0;
+    for(auto pos=vec_workers_.begin();pos!=vec_workers_.end();++pos){
+        ret+=(*pos)->GetDownloadSize();
+    }
+    return ret;
+}
+
+int EasyServer::GetSocketQueueSize(){
+    int ret=0;
+    for(auto pos=vec_workers_.begin();pos!=vec_workers_.end();++pos){
+        ret+=(*pos)->GetSocketQueueSize();
+    }
+    return ret;
+}
+
+int EasyServer::GetTotalSessionNum(){
+    int ret=0;
+    for(auto pos=vec_workers_.begin();pos!=vec_workers_.end();++pos){
+        ret+=(*pos)->GetSessionMapSize();
+    }
+    return ret;
+}
+
+int EasyServer::GetThreadPoolQueueSize(){
+    return thread_pool_->GetQueueSize();
+}
+
+void EasyServer::ClearAllContainers(){
+    for(auto pos=vec_workers_.begin();pos!=vec_workers_.end();++pos){
+        (*pos)->ClearAll();
+    }
+
+    thread_pool_->ClearQueue();
+}
+
+//reponse the cmd from the terminal
+// extern void MonitorServer(EasyServer * server,int threadindex,const std::string& sessionid,unsigned char * data,int len);
+
+extern void ReleaseCapture(TcpConnItem * tci);
+
+bool EasyServer::AddMonitorListener(int port,tcppackethandle_cb tcpcb)
+{
+    TcpPacketHandleCb cb(tcpcb,port,false,true,NULL,-1,NULL,ReleaseCapture,NULL);
+    if(!AddTcpListener(port,cb)){
+        return false;
+    }
+
+    return true;
 }
