@@ -43,7 +43,7 @@ public:
 	}
 
 	void InsertTcpConnItem(std::shared_ptr<TcpConnItem> ptci){
-		std::lock_guard<std::mutex>  lock(mutex_un_map_tcp_conns_);
+		std::lock_guard<std::recursive_mutex>  lock(mutex_un_map_tcp_conns_);
 		auto pos=un_map_tcp_conns_.insert(std::make_pair(ptci->sessionid,ptci));
 		if(!pos.second){
 			pos.first->second=ptci;
@@ -52,7 +52,7 @@ public:
 
 	std::shared_ptr<TcpConnItem> FindTcpConnItem(const std::string& sessionid)
 	{
-		std::lock_guard<std::mutex>  lock(mutex_un_map_tcp_conns_);
+		std::lock_guard<std::recursive_mutex>  lock(mutex_un_map_tcp_conns_);
 		auto pos=un_map_tcp_conns_.find(sessionid);
 		if(pos!=un_map_tcp_conns_.end())
 			return pos->second;
@@ -63,7 +63,7 @@ public:
 
 	bool IsTcpConnItemExist(const std::string& sessionid){
 		bool ret=false;
-		std::lock_guard<std::mutex>  lock(mutex_un_map_tcp_conns_);
+		std::lock_guard<std::recursive_mutex>  lock(mutex_un_map_tcp_conns_);
 		auto pos=un_map_tcp_conns_.find(sessionid);
 		if(pos!=un_map_tcp_conns_.end())
 			ret=true;
@@ -71,7 +71,7 @@ public:
 	}
 
 	void DeleteTcpConnItem(const std::string& sessionid){
-		std::lock_guard<std::mutex>  lock(mutex_un_map_tcp_conns_);
+		std::lock_guard<std::recursive_mutex>  lock(mutex_un_map_tcp_conns_);
 		un_map_tcp_conns_.erase(sessionid);
 	}
 
@@ -174,7 +174,7 @@ public:
 	}
 
 	int GetSessionMapSize(){
-		std::lock_guard<std::mutex>  lock(mutex_un_map_tcp_conns_);
+		std::lock_guard<std::recursive_mutex>  lock(mutex_un_map_tcp_conns_);
 		return un_map_tcp_conns_.size();
 	}
 
@@ -205,7 +205,7 @@ public:
 
 		//clear session map
 		{
-			std::lock_guard<std::mutex>  lock( mutex_un_map_tcp_conns_);
+			std::lock_guard<std::recursive_mutex>  lock( mutex_un_map_tcp_conns_);
 			std::unordered_map<std::string,std::shared_ptr<TcpConnItem> > tmp;
 			un_map_tcp_conns_.swap(tmp);
 		}
@@ -219,7 +219,7 @@ private:
 	std::mutex mutex_notify_send_fd_;
 
 	std::shared_ptr<std::thread>   ptr_thread_;
-	std::mutex mutex_un_map_tcp_conns_;
+	std::recursive_mutex mutex_un_map_tcp_conns_;
 	std::unordered_map<std::string,std::shared_ptr<TcpConnItem> > un_map_tcp_conns_;
 
 	//tcp conn

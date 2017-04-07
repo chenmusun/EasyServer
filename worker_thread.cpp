@@ -361,7 +361,7 @@ void WorkerThread::TcpConnEventCB(bufferevent *bev,short int  events,void * ctx)
 
 void WorkerThread::SendDataToTcpConnection(void * data,int len,const std::string& sessionid,void *arg,int arglen,bool hasResultCb){
     bool ret=false;
-    std::lock_guard<std::mutex>  lock(mutex_un_map_tcp_conns_);
+    std::lock_guard<std::recursive_mutex>  lock(mutex_un_map_tcp_conns_);
     auto ptr=un_map_tcp_conns_.find(sessionid);
     if(ptr!=un_map_tcp_conns_.end()){
         if(bufferevent_write(ptr->second->buff,data,len)!=-1){
@@ -391,7 +391,7 @@ void WorkerThread::SendDataToTcpConnection(void * data,int len,const std::string
 void WorkerThread::SendDataToTcpConnection(const std::string& sessionid,const std::string& strdata,const std::string& strarg,bool hasResultCb)
 {
     bool ret=false;
-    std::lock_guard<std::mutex>  lock(mutex_un_map_tcp_conns_);
+    std::lock_guard<std::recursive_mutex>  lock(mutex_un_map_tcp_conns_);
     auto ptr=un_map_tcp_conns_.find(sessionid);
     if(ptr!=un_map_tcp_conns_.end()){
         if(bufferevent_write(ptr->second->buff,strdata.c_str(),strdata.length())!=-1){
@@ -419,7 +419,7 @@ void WorkerThread::SendDataToTcpConnection(const std::string& sessionid,const st
 
 void WorkerThread::KillTcpConnection(const std::string& sessionid)
 {
-    std::lock_guard<std::mutex>  lock(mutex_un_map_tcp_conns_);
+    std::lock_guard<std::recursive_mutex>  lock(mutex_un_map_tcp_conns_);
     auto ptr=un_map_tcp_conns_.find(sessionid);
     if(ptr!=un_map_tcp_conns_.end()){
         if(ptr->second->handlefunindex!=-1){
